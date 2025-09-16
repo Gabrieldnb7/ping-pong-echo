@@ -1,54 +1,75 @@
-import socket
+# cliente_corrigido.py
 
-# Define o host e a porta do servidor
+import socket
+import time
+import sys
+
 HOST = "127.0.0.1"
 PORT = 65432
+timeoutDelay = 5
 
-# Cria o socket do cliente
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+# Loop principal
+while True:
     try:
-        # Tenta se conectar ao servidor
-        s.connect((HOST, PORT))
+        # 1. Cria um NOVO socket a cada tentativa dentro do loop.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            print("Tentando se conectar ao servidor...")
+            s.connect((HOST, PORT))
+            # Se chegou aqui, a conexão de rede foi um sucesso.
+            # Agora, vamos ver o que a aplicação do servidor nos diz.
+            resposta_inicial = s.recv(1024).decode('utf-8').strip()
+
+            # 2. Verifica se a resposta é uma mensagem de erro do servidor
+            if resposta_inicial.startswith("ERRO:"):
+                print(f"O servidor recusou a conexão com a mensagem: '{resposta_inicial}'")
+                # Lança um erro personalizado para ser capturado abaixo e acionar a retentativa
+                raise ConnectionAbortedError("Servidor ocupado, tentando novamente.")
+            
+            # Conexão bem-sucedida
+            print(f"Servidor disse: '{resposta_inicial}'")
+            print("Conexão estabelecida com sucesso! Digite 'QUIT' para sair.")
+            
+            # Loop de envio/recebimento de mensagens
+            while True:
+                msg = input("Por favor, digite sua mensagem: ")
+
+                try:
+                    s.sendall(f"{msg}\n".encode('utf-8'))
+                    if msg.upper() == 'QUIT':
+                        print("Encerrando a conexão com o servidor...")
+                        sys.exit(0) # Sai do programa completamente
+
+                    data = s.recv(1024)
+                    if not data:
+                        print("O servidor encerrou a conexão.")
+                        break
+                    
+                    resposta_servidor = data.decode('utf-8').strip()
+                    print(f"Resposta do servidor: '{resposta_servidor}'")
+
+                except (BrokenPipeError, ConnectionResetError):
+                    print("Erro: A conexão com o servidor foi perdida.")
+                    break # Sai do loop de mensagens para tentar reconectar            
+                    # Se saiu do loop de mensagens (por perda de conexão), vai tentar reconectar
+                    # A menos que o usuário tenha digitado QUIT e saído com sys.exit()
+
     except ConnectionRefusedError:
-        print("Erro: A conexão foi recusada. O servidor está offline ou a porta está errada.")
-        exit() # Encerra o programa se não conseguir nem conectar
+        # Cenário 1: Servidor totalmente offline
+        print("Erro: A conexão foi recusada. O servidor parece estar offline.")
+    
+    except KeyboardInterrupt:
+        print("\nCliente encerrado pelo usuário.")
+        break # Sai do loop principal
 
-    # 1. Logo após conectar, espera uma resposta inicial do servidor.
-    #    Isso vai nos dizer se a conexão foi aceita ou se o servidor está ocupado.
-    resposta_inicial = s.recv(1024).decode('utf-8').strip()
+    except Exception as e:
+        print(f"Ocorreu um erro inesperado: {e}")
 
-    # 2. Verifica a resposta inicial.
-    if resposta_inicial.startswith("ERRO:"):
-        print(f"Não foi possível conectar: {resposta_inicial}")
-    else:
-        print(f"Servidor disse: '{resposta_inicial}'")
-        print("Digite 'QUIT' para sair.")
-        
-        while True:
-            # Pede ao usuário para digitar uma mensagem
-            msg = input("Por favor, digite sua mensagem: ")
-
-            try:
-                # Envia a mensagem com '\n' e codificada em UTF-8
-                s.sendall(f"{msg}\n".encode('utf-8'))
-
-                # Verifica se o usuário quer encerrar a sessão
-                if msg.upper() == 'QUIT':
-                    print("Encerrando a conexão.")
-                    break
-
-                # Espera pela resposta do servidor (eco)
-                data = s.recv(1024)
-                if not data: # Se o servidor fechar a conexão
-                    print("O servidor encerrou a conexão.")
-                    break
-
-                resposta_servidor = data.decode('utf-8').strip()
-                print(f"Resposta do servidor: '{resposta_servidor}'")
-
-            except (BrokenPipeError, ConnectionResetError):
-                print("Erro: A conexão com o servidor foi perdida.")
-                break
-
+    # 3. Bloco de espera para a próxima tentativa
+    print(f"Tentando novamente em {timeoutDelay} segundos...")
+    try:
+        time.sleep(timeoutDelay)
+    except KeyboardInterrupt:
+        print("\nCliente encerrado pelo usuário.")
+        break # Sai do loop principal
 
 print("Cliente desconectado.")

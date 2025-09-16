@@ -42,6 +42,13 @@ def handle_client(conn, addr):
 
                     # Envia a mesma mensagem de volta para o cliente (eco)
                     conn.sendall(data)
+        except (ConnectionAbortedError, ConnectionResetError):
+            print(f"Cliente {addr} desconectou.")
+
+        except Exception as e:
+            # Captura outros erros inesperados para não derrubar a thread
+            print(f"Ocorreu um erro com o cliente {addr}: {e}")
+
         finally:
             # 3. CRÍTICO: Libera a trava ao final da comunicação.
             #    Isso permite que um novo cliente possa se conectar.
